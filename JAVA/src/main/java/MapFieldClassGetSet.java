@@ -5,6 +5,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class MapFieldClassGetSet {
     public static void generateGettersAndSetters(String folderPath) {
@@ -36,15 +38,18 @@ public class MapFieldClassGetSet {
         }
 
         Map<String, Object> resultMap = extractFieldsAndGenerateGettersSetters(classContent.toString());
-
         String updatedContent = (String) resultMap.get("updatedContent");
         Map<String, String> generatedMap = (Map<String, String>) resultMap.get("map");
 
+        System.out.println("Generated Map:");
+        for (Map.Entry<String, String> entry : generatedMap.entrySet()) {
+            String fieldName = entry.getKey();
+            String getterSetter = entry.getValue();
+
+            System.out.println("Key: " + fieldName + ", Value: " + getterSetter);
+        }
 
         writeUpdatedContentToFile(filePath, updatedContent);
-        for (Map.Entry<String, String> entry : generatedMap.entrySet()) {
-            System.out.println("Key: " + entry.getKey() + ", Value: " + entry.getValue());
-        }
         System.out.println("Getter and setter methods added successfully to the file: " + filePath.getFileName());
     }
 
@@ -53,38 +58,46 @@ public class MapFieldClassGetSet {
         String[] lines = content.split("\\r?\\n");
         String currentClass = null;
         Map<String, String> map = new HashMap<>();
+        Pattern variablePattern = Pattern.compile("(\\w+)\\s+(\\w+);");
 
         for (String line : lines) {
             line = line.trim();
             if (line.startsWith("public class")) {
                 currentClass = line.substring("public class ".length(), line.indexOf('{')).trim();
-
-            } else if (line.trim().startsWith("String") || line.trim().startsWith("Integer")) {
-                String[] parts = line.split("\\s+");
-                if (parts.length >= 2) {
-                    String dataType = parts[0];
-                    String fieldName = parts[1].replace(";", "");
+            } else {
+                Matcher variableMatcher = variablePattern.matcher(line);
+                if (variableMatcher.find()) {
+                    String dataType = variableMatcher.group(1); // Kiểu dữ liệu của biến
+                    String fieldName = variableMatcher.group(2); // Tên của biến
                     String capitalizedName = fieldName.substring(0, 1).toUpperCase() + fieldName.substring(1);
-                    map.put(fieldName, currentClass + ".get" + fieldName + "()");
-                    map.put(fieldName, currentClass + ".set" + fieldName+ "()");
-                    updatedContent.append("public " + dataType + " get").append(capitalizedName).append("() {\n");
-                    updatedContent.append("    return ").append(fieldName).append(";\n");
-                    updatedContent.append("}\n\n");
 
-                    updatedContent.append("public void set ").append(capitalizedName).append( "(" + dataType + " ").append(fieldName).append(") {\n");
-                    updatedContent.append("    this.").append(fieldName).append(" = ").append(fieldName).append(";\n");
-                    updatedContent.append("}\n\n");
+                    if (generateGetterSetter(dataType, fieldName, capitalizedName, updatedContent)) {
+                        // Nếu tạo thành công, thêm vào map
+                        String getter = currentClass + ".get" + capitalizedName + "()";
+                        String setter = currentClass + ".set" + capitalizedName + "(" + dataType + " " + fieldName + ")";
+                        map.put(fieldName, getter + "\n" + setter);
+                    }
                 }
-            } else if (line.contains("public class")) {
-                String innerClassName = line.substring(line.indexOf("class") + 5, line.indexOf('{')).trim();
-                currentClass = currentClass + "." + innerClassName;
             }
             updatedContent.append(line).append("\n");
         }
+
+        // Lưu kết quả vào map và trả về
         Map<String, Object> result = new HashMap<>();
         result.put("updatedContent", updatedContent.toString());
         result.put("map", map);
         return result;
+    }
+
+    private static boolean generateGetterSetter(String dataType, String fieldName, String capitalizedName, StringBuilder updatedContent) {
+        updatedContent.append("public ").append(dataType).append(" get").append(capitalizedName).append("() {\n");
+        updatedContent.append("    return ").append(fieldName).append(";\n");
+        updatedContent.append("}\n\n");
+        updatedContent.append("public void set").append(capitalizedName).append("(").append(dataType).append(" ").append(fieldName).append(") {\n");
+        updatedContent.append("    this.").append(fieldName).append(" = ").append(fieldName).append(";\n");
+        updatedContent.append("}\n\n");
+
+        return true;
     }
 
     private static void writeUpdatedContentToFile(Path filePath, String updatedContent) throws IOException {
