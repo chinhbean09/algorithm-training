@@ -1,69 +1,128 @@
-function removeUnnecessaryText(input) {
+function processHeaderAndComments(input) {
     var lines = input.split('\n');
-    var result = [];
+    var result = '';
+    var inHeader = false;
+    var inFooter = false;
+    var headerStartIndex = -1;
+    var headerEndIndex = -1;
 
-    lines.forEach(line => {
+    lines.forEach((line, index) => {
         var processedLine = line.trim();
 
-        if (processedLine.startsWith('//') && processedLine.indexOf(';') !== -1) {
+        if (processedLine.startsWith('//') && processedLine.includes(';')) {
             if (processedLine.length > 2) {
                 processedLine = processedLine.split(';')[0].trim();
                 processedLine = processedLine.replace(/'/g, '');
-                result.push(processedLine); 
+                result += processedLine + '\n'; 
             }
             return; 
         }
 
-        if (processedLine.indexOf('//') !== -1) {
-            processedLine = processedLine.split('//')[0].trim();
+        if (processedLine === '//') {
+            return;
         }
 
-        result.push(processedLine);
-    });
-
-    return result.join('\n');
-}
-
-function applyJavaCodingRules(input) {
-    var lines = input.split('\n');
-    var result = [];
-    var insideClass = false;
-    var classDepth = 0;
-
-    lines.forEach(line => {
-        var processedLine = line.trim();
-
-        if (processedLine.startsWith('public class') || processedLine.startsWith('private class')) {
-            insideClass = true;
-            result.push(processedLine);
-            classDepth++; // Bắt đầu một khối lớp mới, tăng mức độ lồng
-        } else if (insideClass) {
-            if (processedLine.startsWith('{')) {
-                // Bắt đầu một khối code mới, tăng mức độ lồng
-                result.push(' '.repeat(classDepth * 4) + processedLine);
-                classDepth++;
-            } else if (processedLine.startsWith('}')) {
-                // Kết thúc khối code, giảm mức độ lồng
-                classDepth--;
-                result.push(' '.repeat(classDepth * 4) + processedLine);
-                if (classDepth === 0) {
-                    insideClass = false; // Kết thúc khối lớp
-                }
-            } else {
-                // Thụt dòng vào trong khối lớp
-                result.push(' '.repeat(classDepth * 4) + processedLine);
+        if (!inHeader && (/^\/\/\*{3,}/.test(processedLine) || /\/\/-{3,}\*$/.test(processedLine) || processedLine.startsWith('/*'))) {
+            if (processedLine == '/*'){
+                result += processedLine.replace(/^\/{2}\*+/, '/*') + '\n';
+                inHeader = true;
+                return;
             }
-        } else {
-            result.push(line); // Giữ nguyên các dòng bên ngoài khối lớp
+            
+            if (lines[index + 1] && !lines[index + 1].endsWith('*') ) {
+                return;
+            }
+            
+            inHeader = true;
+            result += processedLine.replace(/^\/{2}\*+/, '/*') + '\n';
+                return; 
+            }
+        
+        
+        if (inHeader && (/^\/\/\*{3,}/.test(processedLine) || /\/\/-{3,}\*$/.test(processedLine) || processedLine.startsWith('*/'))) {
+            if (lines[index + 1] === '' || !lines[index + 1].endsWith('*') || /\/\/\*[^*]*\*[^/]/.test(lines[index + 1]) || /\*+$/.test(lines[index + 1])) {
+                headerEndIndex = index;
+                if (lines[index + 1].trim().endsWith('/')) {
+                    inHeader = true;
+                } else if(lines[index + 1].trim().endsWith('*')){
+                    inHeader = true;
+                } else {
+                    inHeader = false;
+                    result += processedLine.replace(/.*/, '*/') + '\n';
+                }
+                return;
+            } else {
+                inHeader = false;
+                result += processedLine.replace(/.*/, '*/') + '\n';
+                return;
+            }
+            
+
+        } 
+
+        if (inHeader) {
+            if (/^\/\/\*{3,}/.test(processedLine) || /\/\/-{3,}\*$/.test(processedLine) || processedLine.startsWith('/*')) {
+                return; 
+            }
+            
+            if (processedLine.startsWith('//*')) {
+                processedLine = processedLine.replace(/^\/\//, '').replace(/'/g, '').trim();
+            } else if (processedLine.startsWith('//')) {
+                processedLine = processedLine.replace(/^\/\//, '*').replace(/'/g, '').trim();
+            }
+            if (processedLine.endsWith('*')) {
+                processedLine = processedLine.replace(/\*+$/, '').trim().replace(/'/g, '').trim();
+            }
+            if (processedLine.startsWith('*')) {
+                processedLine = processedLine.replace(/'/g, '').trim();
+            }
+            if (!lines[index + 1].startsWith('//')){
+                if(lines[index + 1].startsWith('*')){
+                    result += processedLine + '\n';
+                    return;
+                }
+                processedLine += '\n' + '*/'
+                inHeader = false;
+            }
+            result += processedLine + '\n';
+            return;
         }
+        
+        
+    
+        var matchColon = processedLine.match(/\/\/\s*(.*):\s*(.*)/); 
+        if (matchColon !== null) {
+            var field = matchColon[1].trim();
+            var value = matchColon[2].trim().replace(/\*/g, ''); 
+            result += '     ' + field + ' : ' + value + '\n';
+            return; 
+        }
+
+    if (!inHeader && processedLine.startsWith('//')) {
+        if (processedLine.startsWith('//*')) {
+            var replacedLine = processedLine.replace(/\*/g, '');
+            result += replacedLine.trim() + '\n';            
+        } else {
+            if (processedLine.startsWith('*')) {
+                result += processedLine.substring(1).replace(/'/g, '').trim() + '\n';
+            } else {
+                result += processedLine.replace(/'/g, '').trim() + '\n';
+            }
+        }
+    } else {
+        result += processedLine + '\n';
+        return result; 
+    }
     });
 
-    return result.join('\n');
+    return result;
 }
 
-var input = `Tự custom commnent`;
+var input = `
+....
+.....
+...
+`;
 
-var cleanedInput = removeUnnecessaryText(input);
-var output = applyJavaCodingRules(cleanedInput);
-
+var output = processHeaderAndComments(input);
 console.log(output);
